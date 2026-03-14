@@ -170,10 +170,53 @@ def _flat_model_fields(
 # Output formatting
 # ---------------------------------------------------------------------------
 
+def _flatten_for_csv(item: Any) -> dict[str, str]:
+    """
+    Convert a Pydantic model (or plain dict) to a flat {str: str} dict for CSV.
+
+    Rules:
+    - Scalar values          → str(value)
+    - list[scalar]           → pipe-joined  "a|b|c"
+    - list[model/dict]       → JSON string  (too nested to flatten further)
+    - nested model/dict      → JSON string
+    - None                   → ""
+    """
+    if isinstance(item, BaseModel):
+        raw = item.model_dump(exclude_none=False)
+    elif isinstance(item, dict):
+        raw = item
+    else:
+        return {"value": str(item)}
+
+    flat: dict[str, str] = {}
+    for k, v in raw.items():
+        if v is None:
+            flat[k] = ""
+        elif isinstance(v, list):
+            if not v:
+                flat[k] = ""
+            elif isinstance(v[0], (dict, BaseModel)):
+                flat[k] = json.dumps(
+                    [i.model_dump(exclude_none=True) if isinstance(i, BaseModel) else i for i in v]
+                )
+            else:
+                flat[k] = "|".join(str(x) for x in v)
+        elif isinstance(v, (dict, BaseModel)):
+            flat[k] = json.dumps(
+                v.model_dump(exclude_none=True) if isinstance(v, BaseModel) else v
+            )
+        else:
+            flat[k] = str(v)
+    return flat
+
+
 def _format_output(result: Any, output: str,
                    max_items: Optional[int] = None,
                    fields: Optional[list[str]] = None) -> None:
-    """Pretty-print a single model, list, or generator."""
+    """Render a single model, list, or generator as table / json / csv."""
+    import csv as _csv
+    import sys
+
     if isinstance(result, collections.abc.Generator):
         items = list(result) if max_items is None else _take(result, max_items)
     elif isinstance(result, list):
@@ -181,6 +224,7 @@ def _format_output(result: Any, output: str,
     else:
         items = [result]
 
+    # ---- JSON ----
     if output == "json":
         rows = []
         for item in items:
@@ -195,6 +239,33 @@ def _format_output(result: Any, output: str,
         rprint(json.dumps(payload, indent=2))
         return
 
+    # ---- CSV ----
+    if output == "csv":
+        if not items:
+            return
+        flat_rows = [_flatten_for_csv(item) for item in items]
+        if fields:
+            # keep only requested fields, in order; fill missing with ""
+            all_keys = fields
+            flat_rows = [{k: row.get(k, "") for k in all_keys} for row in flat_rows]
+        else:
+            # Union of all keys across rows, preserving first-row order
+            all_keys = list(dict.fromkeys(k for row in flat_rows for k in row))
+
+        writer = _csv.DictWriter(
+            sys.stdout,
+            fieldnames=all_keys,
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        writer.writerows(flat_rows)
+        if max_items and len(items) == max_items:
+            rprint(f"[dim]# Results capped at {max_items} — increase with --max-items[/dim]",
+                   file=sys.stderr)
+        return
+
+    # ---- table (default) ----
     if not items:
         rprint("[yellow]No results.[/yellow]")
         return
@@ -220,7 +291,7 @@ def _format_output(result: Any, output: str,
         hidden = len(all_fields) - len(show)
         hints = []
         if hidden > 0 and not fields:
-            hints.append(f"[dim]+{hidden} hidden fields — use --fields or --output json[/dim]")
+            hints.append(f"[dim]+{hidden} hidden fields — use --fields or --output json/csv[/dim]")
         if max_items and len(items) == max_items:
             hints.append(f"[dim]Results capped at {max_items} — increase with --max-items[/dim]")
         for h in hints:
@@ -290,7 +361,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         "typer": typer,
         # global option defaults
         "_output_default": typer.Option("table", "--output", "-o",
-                                         help="Output format: table | json"),
+                                         help="Output format: table | json | csv"),
         "_max_items_default": typer.Option(None, "--max-items", "-n",
                                             help="Cap number of results (list commands)",
                                             min=1),
@@ -653,7 +724,7 @@ def completion(
 @root_app.command()
 def whoami(
     output: str = typer.Option("table", "--output", "-o",
-                                help="Output format: table | json"),
+                                help="Output format: table | json | csv"),
 ):
     """Show the currently authenticated user."""
     tok = _resolve_token()
