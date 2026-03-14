@@ -8,3 +8,9 @@ dependencies = [
     "typer>=0.24.1",
     "wxc-sdk>=1.30.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.6",
+]
