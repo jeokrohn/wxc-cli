@@ -54,7 +54,7 @@ console = Console()
 # Methods defined on ApiChild that are raw HTTP helpers — skip unless overridden.
 _SKIP_METHODS = frozenset({"ep", "get", "post", "put", "patch", "delete"})
 # Always skip 'ep' (internal URL builder) regardless of override.
-_ALWAYS_SKIP = frozenset({"ep"})
+_ALWAYS_SKIP = frozenset({"ep", "f_ep"})
 
 def _is_inherited_http_helper(cls: type, mname: str) -> bool:
     """
