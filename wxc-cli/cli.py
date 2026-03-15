@@ -51,7 +51,26 @@ console = Console()
 # Constants
 # ---------------------------------------------------------------------------
 
+# Methods defined on ApiChild that are raw HTTP helpers — skip unless overridden.
 _SKIP_METHODS = frozenset({"ep", "get", "post", "put", "patch", "delete"})
+# Always skip 'ep' (internal URL builder) regardless of override.
+_ALWAYS_SKIP = frozenset({"ep"})
+
+def _is_inherited_http_helper(cls: type, mname: str) -> bool:
+    """
+    Return True when mname should be skipped — i.e. it is not defined
+    directly on cls or any SDK-specific intermediate class, meaning it is
+    just the raw ApiChild HTTP helper inherited unchanged.
+
+    If the concrete class (or a mixin between it and ApiChild) overrides
+    the method with a typed signature we want to include it.
+    """
+    from wxc_sdk.api_child import ApiChild
+    for klass in cls.__mro__:
+        if mname in klass.__dict__:
+            # First class in MRO that owns this method
+            return klass is ApiChild or klass is object
+    return True
 _RESERVED_PARAM_NAMES = frozenset({"help", "output", "token", "ctx",
                                     "max_items", "fields", "dry_run",
                                     "patch", "from_file"})
@@ -701,7 +720,12 @@ def _register_api_group(parent: typer.Typer, name: str, api_obj: Any,
     current_path = f"{api_path}.{name}" if api_path else name
 
     for mname, method in inspect.getmembers(api_obj, predicate=inspect.ismethod):
-        if mname.startswith("_") or mname in _SKIP_METHODS:
+        if mname.startswith("_"):
+            continue
+        if mname in _ALWAYS_SKIP:
+            continue
+        # Skip raw HTTP helpers unless the concrete class overrides them
+        if mname in _SKIP_METHODS and _is_inherited_http_helper(type(api_obj), mname):
             continue
         try:
             fn  = _build_command_fn(method, current_path, mname)
