@@ -10,22 +10,22 @@
 # ]
 # ///
 """
-wxc - CLI for the Webex SDK (wxc_sdk)
+wxc-cli - CLI for the Webex SDK (wxc_sdk)
 
 Auto-generates Typer commands by introspecting WebexSimpleApi at startup.
 Every sub-API becomes a command group; every public method becomes a command.
 
-Auth: run `wxc login` to store a token, set WEBEX_ACCESS_TOKEN, or pass --token.
+Auth: run `wxc-cli login` to store a token, set WEBEX_ACCESS_TOKEN, or pass --token.
 
 Usage examples:
-  wxc login                                    # store token in keyring
-  wxc people list --display-name Alice
-  wxc people list --output json --max-items 5
-  wxc people list --fields person_id,emails,display_name
-  wxc people details --person-id Y2lzY29...
-  wxc people create --first-name Alice --last-name Smith --emails alice@x.com
-  wxc rooms list --output json | jq '.[].title'
-  wxc telephony calls list-calls --dry-run
+  wxc-cli login                                    # store token in keyring
+  wxc-cli people list --display-name Alice
+  wxc-cli people list --output json --max-items 5
+  wxc-cli people list --fields person_id,emails,display_name
+  wxc-cli people details --person-id Y2lzY29...
+  wxc-cli people create --first-name Alice --last-name Smith --emails alice@x.com
+  wxc-cli rooms list --output json | jq '.[].title'
+  wxc-cli telephony calls list-calls --dry-run
 """
 
 from __future__ import annotations
@@ -524,7 +524,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
             exec_ns[f"_ann_{json_key}"] = Optional[str]
             _json_help = f"Full {model_cls.__name__} as JSON (overrides individual flags). Accepts @file or @-."
             if not flat:
-                _json_help += f" Use \"wxc schema {model_cls.__name__}\" for a template."
+                _json_help += f" Use \"wxc-cli schema {model_cls.__name__}\" for a template."
             exec_ns[f"_def_{json_key}"] = typer.Option(
                 None,
                 f"--{pname.replace('_','-')}-json",
@@ -565,7 +565,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         """Instantiate a fresh API with the current token and navigate to the method."""
         tok = _resolve_token()
         if not tok:
-            rprint("[red]Not authenticated. Run `wxc login` or set WEBEX_ACCESS_TOKEN.[/red]")
+            rprint("[red]Not authenticated. Run `wxc-cli login` or set WEBEX_ACCESS_TOKEN.[/red]")
             raise typer.Exit(1)
         api = wxc_sdk.WebexSimpleApi(tokens=tok)
         obj = api
@@ -751,18 +751,18 @@ def _register_api_group(parent: typer.Typer, name: str, api_obj: Any,
 # ---------------------------------------------------------------------------
 
 root_app = typer.Typer(
-    name="wxc",
+    name="wxc-cli",
     help="[bold]Webex CLI[/bold] — every wxc_sdk endpoint as a command.\n\n"
-         "Set [bold cyan]WEBEX_ACCESS_TOKEN[/bold cyan], run [bold]wxc login[/bold], "
+         "Set [bold cyan]WEBEX_ACCESS_TOKEN[/bold cyan], run [bold]wxc-cli login[/bold], "
          "or pass [bold]--token[/bold].",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
 
-# Ensure the underlying Click context always sees "wxc" as the program name,
+# Ensure the underlying Click context always sees "wxc-cli" as the program name,
 # regardless of how the script was invoked (python cli.py, ./cli.py, etc.).
 # This is what gets baked into shell completion scripts.
-_PROG_NAME = "wxc"
+_PROG_NAME = "wxc-cli"
 
 
 @root_app.callback()
@@ -822,12 +822,12 @@ def completion(
                                   help="Write the script to the appropriate rc file automatically."),
 ):
     """
-    Print or install shell completion for wxc.
+    Print or install shell completion for wxc-cli.
 
     Usage:
-      wxc completion          # auto-detect shell, print script
-      wxc completion bash     # print bash script
-      wxc completion --install  # write to ~/.bashrc / ~/.zshrc / ~/.config/fish/...
+      wxc-cli completion          # auto-detect shell, print script
+      wxc-cli completion bash     # print bash script
+      wxc-cli completion --install  # write to ~/.bashrc / ~/.zshrc / ~/.config/fish/...
     """
     # Auto-detect shell from $SHELL if not given
     if shell is None:
@@ -842,7 +842,7 @@ def completion(
         rprint(f"[red]Unsupported shell '{shell}'. Choose bash, zsh, or fish.[/red]")
         raise typer.Exit(1)
 
-    # Generate via Click's ShellComplete, explicitly naming the program "wxc".
+    # Generate via Click's ShellComplete, explicitly naming the program "wxc-cli".
     # This is the reliable path: it never reads sys.argv[0], so the script is
     # always correct regardless of how the user originally invoked the CLI.
     complete_var = f"_{_PROG_NAME.upper()}_COMPLETE"
@@ -860,27 +860,27 @@ def completion(
         rprint()
         if shell == "bash":
             rprint(f"[dim]# Add to ~/.bashrc:[/dim]")
-            rprint(f"[dim]#   eval \"$(wxc completion --shell bash)\"[/dim]")
+            rprint(f"[dim]#   eval \"$(wxc-cli completion --shell bash)\"[/dim]")
         elif shell == "zsh":
             rprint(f"[dim]# Add to ~/.zshrc:[/dim]")
-            rprint(f"[dim]#   eval \"$(wxc completion --shell zsh)\"[/dim]")
+            rprint(f"[dim]#   eval \"$(wxc-cli completion --shell zsh)\"[/dim]")
         elif shell == "fish":
-            rprint(f"[dim]# Add to ~/.config/fish/completions/wxc.fish:[/dim]")
-            rprint(f"[dim]#   wxc completion --shell fish > ~/.config/fish/completions/wxc.fish[/dim]")
+            rprint(f"[dim]# Add to ~/.config/fish/completions/wxc-cli.fish:[/dim]")
+            rprint(f"[dim]#   wxc-cli completion --shell fish > ~/.config/fish/completions/wxc-cli.fish[/dim]")
         return
 
     # --install: write to the appropriate rc file
     home = os.path.expanduser("~")
     if shell == "bash":
         rc = os.path.join(home, ".bashrc")
-        line = 'eval "$(wxc completion --shell bash)"'
+        line = 'eval "$(wxc-cli completion --shell bash)"'
     elif shell == "zsh":
         rc = os.path.join(home, ".zshrc")
-        line = 'eval "$(wxc completion --shell zsh)"'
+        line = 'eval "$(wxc-cli completion --shell zsh)"'
     elif shell == "fish":
         fish_dir = os.path.join(home, ".config", "fish", "completions")
         os.makedirs(fish_dir, exist_ok=True)
-        rc = os.path.join(fish_dir, "wxc.fish")
+        rc = os.path.join(fish_dir, "wxc-cli.fish")
         with open(rc, "w") as f:
             f.write(script + "\n")
         rprint(f"[green]✓ Completion written to {rc}[/green]")
@@ -893,7 +893,7 @@ def completion(
             rprint(f"[yellow]Completion already present in {rc}[/yellow]")
         else:
             with open(rc, "a") as f:
-                f.write(f"\n# wxc shell completion\n{line}\n")
+                f.write(f"\n# wxc-cli shell completion\n{line}\n")
             rprint(f"[green]✓ Added to {rc}[/green]")
             rprint(f"[dim]Restart your shell or run: source {rc}[/dim]")
     except OSError as e:
@@ -917,9 +917,9 @@ def schema(
     Use this to build input files for --*-json @file flags.
 
     Examples:
-      wxc schema --list                           # discover model names
-      wxc schema CallForwarding > forwarding.json
-      wxc schema CallQueue --output schema | jq .properties
+      wxc-cli schema --list                           # discover model names
+      wxc-cli schema CallForwarding > forwarding.json
+      wxc-cli schema CallQueue --output schema | jq .properties
     """
     import pkgutil, importlib
     import wxc_sdk as _wxc_root
@@ -984,7 +984,7 @@ def schema(
                 rprint(f"  [cyan]{c}[/cyan]")
         else:
             rprint(f"[red]Model '{model_name}' not found.[/red]")
-            rprint("[dim]Use wxc schema --list to see all available models.[/dim]")
+            rprint("[dim]Use wxc-cli schema --list to see all available models.[/dim]")
         raise typer.Exit(1)
 
 
@@ -1002,7 +1002,7 @@ def whoami(
     """Show the currently authenticated user."""
     tok = _resolve_token()
     if not tok:
-        rprint("[red]Not authenticated. Run `wxc login` or set WEBEX_ACCESS_TOKEN.[/red]")
+        rprint("[red]Not authenticated. Run `wxc-cli login` or set WEBEX_ACCESS_TOKEN.[/red]")
         raise typer.Exit(1)
     try:
         api = wxc_sdk.WebexSimpleApi(tokens=tok)
