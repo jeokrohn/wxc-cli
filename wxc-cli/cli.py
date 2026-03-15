@@ -53,7 +53,8 @@ console = Console()
 
 _SKIP_METHODS = frozenset({"ep", "get", "post", "put", "patch", "delete"})
 _RESERVED_PARAM_NAMES = frozenset({"help", "output", "token", "ctx",
-                                    "max_items", "fields", "dry_run"})
+                                    "max_items", "fields", "dry_run",
+                                    "patch", "from_file"})
 _KEYRING_SERVICE = "wxc-cli"
 _KEYRING_USER = "access-token"
 
@@ -146,7 +147,7 @@ def _flat_model_fields(
     - Nested models, dict, list[Model], complex types
     """
     result: dict[str, tuple[type, Any]] = {}
-    for fname, field in model_cls.__class__.model_fields.items():
+    for fname, field in model_cls.model_fields.items():
         ann = _unwrap_optional(field.annotation)
         default = field.default  # usually None or PydanticUndefined
 
@@ -311,6 +312,91 @@ def _take(gen: collections.abc.Generator, n: int) -> list:
 
 
 # ---------------------------------------------------------------------------
+# Model utilities: deep merge, template, @file resolution, reader lookup
+# ---------------------------------------------------------------------------
+
+def _deep_merge(base: dict, patch: dict) -> dict:
+    result = dict(base)
+    for k, v in patch.items():
+        if isinstance(v, dict) and isinstance(result.get(k), dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
+def _resolve_json_arg(raw: str) -> str:
+    import sys as _sys
+    if raw.startswith("@"):
+        source = raw[1:]
+        try:
+            if source == "-":
+                return _sys.stdin.read()
+            with open(source) as fh:
+                return fh.read()
+        except OSError as e:
+            raise ValueError(f"Cannot read {source!r}: {e}") from e
+    return raw
+
+
+def _make_template(cls, _depth: int = 0) -> dict:
+    import enum as _enum
+    result = {}
+    for fname, field in cls.model_fields.items():
+        ann = _unwrap_optional(field.annotation)
+        is_list = typing.get_origin(ann) is list
+        if is_list:
+            inner_args = typing.get_args(ann)
+            ann = inner_args[0] if inner_args else str
+        if inspect.isclass(ann) and issubclass(ann, BaseModel):
+            inner = _make_template(ann, _depth + 1) if _depth < 3 else {}
+            result[fname] = [inner] if is_list else inner
+        elif inspect.isclass(ann) and issubclass(ann, _enum.Enum):
+            vals = [e.value for e in ann]
+            result[fname] = [vals[0]] if is_list else vals[0]
+        elif ann is bool:
+            result[fname] = [] if is_list else False
+        elif ann is int:
+            result[fname] = [] if is_list else 0
+        elif ann is str:
+            result[fname] = [] if is_list else ""
+        else:
+            result[fname] = [] if is_list else None
+    return result
+
+
+def _get_single_model_return(sig):
+    ret = sig.return_annotation
+    if ret is inspect.Parameter.empty:
+        return None
+    ret = _unwrap_optional(ret)
+    if typing.get_origin(ret) in (list, collections.abc.Generator):
+        return None
+    if inspect.isclass(ret) and issubclass(ret, BaseModel):
+        return ret
+    return None
+
+
+def _find_reader(resolve_method_fn, model_cls):
+    writer = resolve_method_fn()
+    api_obj = writer.__self__
+    for mname, method in inspect.getmembers(api_obj, predicate=inspect.ismethod):
+        if mname.startswith("_"):
+            continue
+        try:
+            ret = _get_single_model_return(inspect.signature(method))
+            if ret is not None and (ret is model_cls or issubclass(ret, model_cls)):
+                return method
+        except Exception:
+            continue
+    raise ValueError(
+        f"No read method returning {model_cls.__name__} found on "
+        f"{type(api_obj).__name__}. "
+        f"Supply the full object with --{model_cls.__name__.lower()}-json instead."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dynamic command factory
 # ---------------------------------------------------------------------------
 
@@ -372,6 +458,20 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
                                           help="Print the SDK call without executing it"),
     }
 
+    for _pn, _mc in pydantic_params.items():
+        _pk = f"{_pn}__patch"
+        exec_ns[f"_ann_{_pk}"] = Optional[str]
+        exec_ns[f"_def_{_pk}"] = typer.Option(
+            None,
+            f"--{_pn.replace('_','-')}-patch",
+            help=(
+                f"Partial JSON deep-merged over current {_mc.__name__}. "
+                f"Accepts @file or @- (stdin). "
+                f"Takes priority over --{_pn.replace('_','-')}-json and flat flags."
+            ),
+            show_default=False,
+        )
+
     sig_parts = [
         "def cmd(*,",
         "    output: str = _output_default,",
@@ -379,6 +479,9 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         "    fields: Optional[str] = _fields_default,",
         "    dry_run: bool = _dry_run_default,",
     ]
+    for _pn in pydantic_params:
+        _pk = f"{_pn}__patch"
+        sig_parts.append(f"    {_pk}: _ann_{_pk} = _def_{_pk},")
     captured_flat_keys: dict[str, str] = {}  # cli_key → pname (the parent model param)
 
     for pname, param in usable:
@@ -400,10 +503,13 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
             # Always also expose a --<param>-json fallback
             json_key = f"{pname}__json"
             exec_ns[f"_ann_{json_key}"] = Optional[str]
+            _json_help = f"Full {model_cls.__name__} as JSON (overrides individual flags). Accepts @file or @-."
+            if not flat:
+                _json_help += f" Use \"wxc schema {model_cls.__name__}\" for a template."
             exec_ns[f"_def_{json_key}"] = typer.Option(
                 None,
                 f"--{pname.replace('_','-')}-json",
-                help=f"Full {model_cls.__name__} as JSON (overrides individual fields)",
+                help=_json_help,
                 show_default=False,
             )
             sig_parts.append(f"    {json_key}: _ann_{json_key} = _def_{json_key},")
@@ -457,6 +563,8 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         max_items = int(max_items_raw) if max_items_raw is not None else None
         fields    = [f.strip() for f in fields_raw.split(",")] if fields_raw else None
 
+        # Patches are collected here first; resolved after dry-run check
+        _pending_patches: dict[str, tuple] = {}  # pname -> (model_cls, patch_dict)
         call_kw: dict[str, Any] = {}
 
         for pname, _param in captured_usable:
@@ -466,10 +574,26 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
                 json_key  = f"{pname}__json"
                 raw_json  = kw.get(json_key)
 
-                if raw_json:
-                    # Full JSON overrides individual fields
+                patch_key = f"{pname}__patch"
+                raw_patch  = kw.get(patch_key)
+
+                if raw_patch:
+                    # --*-patch: parse the patch dict first (needed for dry-run too)
                     try:
-                        call_kw[pname] = model_cls.model_validate_json(raw_json)
+                        patch_dict = json.loads(_resolve_json_arg(raw_patch))
+                    except (ValueError, json.JSONDecodeError) as e:
+                        rprint(f"[red]Bad patch JSON for --{pname.replace('_','-')}-patch: {e}[/red]")
+                        raise typer.Exit(1)
+                    # Stash patch for dry-run display; actual read happens below
+                    _pending_patches[pname] = (model_cls, patch_dict)
+                    call_kw[pname] = None  # placeholder; resolved after dry-run check
+
+                elif raw_json:
+                    # --*-json: full object; supports @file / @- expansion
+                    try:
+                        call_kw[pname] = model_cls.model_validate_json(
+                            _resolve_json_arg(raw_json)
+                        )
                     except Exception as e:
                         rprint(f"[red]Bad JSON for --{pname.replace('_','-')}-json: {e}[/red]")
                         raise typer.Exit(1)
@@ -499,12 +623,44 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
 
         if dry_run:
             qname = f"{captured_api_path}.{captured_method_name}"
-            rprint(f"[bold cyan]DRY RUN[/bold cyan] — would call:")
-            rprint(f"  [yellow]{qname}[/yellow](")
+            rprint(f"[bold cyan]DRY RUN[/bold cyan] [dim]—[/dim] [yellow]{qname}[/yellow](")
             for k, v in call_kw.items():
-                rprint(f"    [green]{k}[/green] = {v!r}")
-            rprint("  )")
+                if v is None and k in _pending_patches:
+                    continue  # printed below as patch block
+                if isinstance(v, BaseModel):
+                    v_str = v.model_dump_json(exclude_none=True, indent=2)
+                    # indent continuation lines to align under the key
+                    pad = " " * (4 + len(k) + 3)
+                    v_str = v_str.replace("\n", "\n" + pad)
+                    rprint(f"  [green]{k}[/green] = {v_str}")
+                else:
+                    rprint(f"  [green]{k}[/green] = {v!r}")
+            # Show pending patches with what WOULD be read
+            for _ppname, (_pmc, _pd) in _pending_patches.items():
+                rprint(f"  [green]{_ppname}[/green] = [dim](patch — reads current {_pmc.__name__} then merges:)[/dim]")
+                rprint("  " + json.dumps(_pd, indent=2).replace("\n", "\n  "))
+            rprint(")")
             return
+
+        # Resolve any --patch args now (requires a live API read)
+        for _ppname, (_pmodel_cls, _ppatch_dict) in _pending_patches.items():
+            try:
+                _reader     = _find_reader(_resolve_method, _pmodel_cls)
+                _reader_sig = inspect.signature(_reader)
+                _reader_kw  = {}
+                for _spn, _sp in captured_usable:
+                    if _spn not in captured_pydantic and _spn in _reader_sig.parameters:
+                        _sv = kw.get(_spn)
+                        if _sv is not None:
+                            _reader_kw[_spn] = _sv
+                _current = _reader(**_reader_kw)
+                _merged  = _deep_merge(_current.model_dump(), _ppatch_dict)
+                call_kw[_ppname] = _pmodel_cls.model_validate(_merged)
+            except typer.Exit:
+                raise
+            except Exception as e:
+                rprint(f"[red]Patch failed: {e}[/red]")
+                raise typer.Exit(1)
 
         try:
             result = _resolve_method()(**call_kw)
@@ -719,6 +875,99 @@ def completion(
     except OSError as e:
         rprint(f"[red]Could not write to {rc}: {e}[/red]")
         raise typer.Exit(1)
+
+
+
+@root_app.command()
+def schema(
+    model_name: Optional[str] = typer.Argument(None, help="Model class name, e.g. CallQueue, CallForwarding"),
+    output: str = typer.Option(
+        "template", "--output", "-o",
+        help="Output: template (editable JSON with defaults) | schema (JSON Schema)",
+    ),
+    list_models: bool = typer.Option(False, "--list", "-l", is_flag=True,
+                                      help="List all available model names"),
+):
+    """Print a JSON template or JSON Schema for any wxc_sdk model.
+
+    Use this to build input files for --*-json @file flags.
+
+    Examples:
+      wxc schema --list                           # discover model names
+      wxc schema CallForwarding > forwarding.json
+      wxc schema CallQueue --output schema | jq .properties
+    """
+    import pkgutil, importlib
+    import wxc_sdk as _wxc_root
+
+    # Shared: walk all modules collecting BaseModel subclasses
+    def _all_models():
+        seen = set()
+        for _importer, modname, _ispkg in pkgutil.walk_packages(
+            path=_wxc_root.__path__,
+            prefix=_wxc_root.__name__ + ".",
+            onerror=lambda _: None,
+        ):
+            try:
+                mod = importlib.import_module(modname)
+            except Exception:
+                continue
+            for attr in dir(mod):
+                cls = getattr(mod, attr, None)
+                if (cls is not None and inspect.isclass(cls)
+                        and issubclass(cls, BaseModel)
+                        and cls.__module__.startswith("wxc_sdk")
+                        and cls.__name__ not in seen):
+                    seen.add(cls.__name__)
+                    yield cls.__name__
+
+    if list_models:
+        names = sorted(_all_models())
+        for name in names:
+            rprint(name)
+        rprint(f"[dim]({len(names)} models)[/dim]")
+        return
+
+    if model_name is None:
+        rprint("[red]Provide a model name or use --list to see all models.[/red]")
+        raise typer.Exit(1)
+
+    target = None
+    for _importer, modname, _ispkg in pkgutil.walk_packages(
+        path=_wxc_root.__path__,
+        prefix=_wxc_root.__name__ + ".",
+        onerror=lambda _: None,
+    ):
+        try:
+            mod = importlib.import_module(modname)
+        except Exception:
+            continue
+        cls = getattr(mod, model_name, None)
+        if cls is not None and inspect.isclass(cls) and issubclass(cls, BaseModel):
+            target = cls
+            break
+
+    if target is None:
+        # Try case-insensitive match and suggest closest names
+        import pkgutil as _pk2, importlib as _il2
+        candidates = sorted(
+            n for n in _all_models()
+            if model_name.lower() in n.lower()
+        )[:8]
+        if candidates:
+            rprint(f"[red]Model '{model_name}' not found.[/red] Did you mean one of:")
+            for c in candidates:
+                rprint(f"  [cyan]{c}[/cyan]")
+        else:
+            rprint(f"[red]Model '{model_name}' not found.[/red]")
+            rprint("[dim]Use wxc schema --list to see all available models.[/dim]")
+        raise typer.Exit(1)
+
+
+    if output == "schema":
+        rprint(json.dumps(target.model_json_schema(), indent=2))
+    else:
+        rprint(json.dumps(_make_template(target), indent=2))
 
 
 @root_app.command()
