@@ -6,7 +6,7 @@ a command, wired up at startup by introspecting `WebexSimpleApi`.
 ## Install
  
 ```bash
-pip install wxc-cli
+pip install wxc_cli
 ```
  
 Or from source:
@@ -21,27 +21,27 @@ pip install -e .
 ```bash
 export WEBEX_ACCESS_TOKEN="your-token-here"
 # or pass it per-command:
-wxc --token YOUR_TOKEN people list
+wxc_cli --token YOUR_TOKEN people list
 ```
  
 ## Usage
  
 ```
-wxc --help                          # list all command groups
-wxc people --help                   # list people commands
-wxc people list --display-name Bob  # filter by name
-wxc people list --output json       # JSON output
-wxc people details --person-id Y2l… # single person
-wxc telephony calls list-calls      # list active calls
-wxc telephony callqueue --help      # nested sub-APIs work too
+wxc-cli --help                          # list all command groups
+wxc-cli people --help                   # list people commands
+wxc-cli people list --display-name Bob  # filter by name
+wxc-cli people list --output json       # JSON output
+wxc-cli people details --person-id Y2l… # single person
+wxc-cli telephony calls list-calls      # list active calls
+wxc-cli telephony callqueue --help      # nested sub-APIs work too
 ```
  
 ### Output formats
  
-Every command accepts `--output table` (default) or `--output json`.
+Every command accepts `--output table` (default), `--output json`, or `--output csv`.
  
 ```bash
-wxc rooms list --output json | jq '.[].title'
+wxc_cli rooms list --output json | jq '.[].title'
 ```
  
 ### Pydantic model inputs
@@ -49,7 +49,7 @@ wxc rooms list --output json | jq '.[].title'
 Methods that take a Pydantic model (e.g. `create`, `update`) accept a `--<param>-json` flag:
  
 ```bash
-wxc people create \
+wxc_cli people create \
   --settings-json '{"emails":["alice@example.com"],"display_name":"Alice"}'
 ```
  
@@ -68,5 +68,5 @@ New endpoints added to `wxc_sdk` appear in the CLI with **zero maintenance**.
 ## Shell completion
  
 ```bash
-wxc --install-completion   # bash / zsh / fish
+wxc_cli --install-completion   # bash / zsh / fish
 ```
