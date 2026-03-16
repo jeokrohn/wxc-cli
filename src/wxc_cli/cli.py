@@ -213,7 +213,7 @@ def _flatten_for_csv(item: Any) -> dict[str, str]:
     - None                   → ""
     """
     if isinstance(item, BaseModel):
-        raw = item.model_dump(exclude_none=False)
+        raw = item.model_dump(exclude_none=False, mode='json')
     elif isinstance(item, dict):
         raw = item
     else:
@@ -227,11 +227,13 @@ def _flatten_for_csv(item: Any) -> dict[str, str]:
             if not v:
                 flat[k] = ''
             elif isinstance(v[0], (dict, BaseModel)):
-                flat[k] = json.dumps([i.model_dump(exclude_none=True) if isinstance(i, BaseModel) else i for i in v])
+                flat[k] = json.dumps(
+                    [i.model_dump(exclude_none=True, mode='json') if isinstance(i, BaseModel) else i for i in v]
+                )
             else:
                 flat[k] = '|'.join(str(x) for x in v)
         elif isinstance(v, (dict, BaseModel)):
-            flat[k] = json.dumps(v.model_dump(exclude_none=True) if isinstance(v, BaseModel) else v)
+            flat[k] = json.dumps(v.model_dump(exclude_none=True, mode='json') if isinstance(v, BaseModel) else v)
         else:
             flat[k] = str(v)
     return flat
