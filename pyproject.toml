@@ -12,6 +12,13 @@ dependencies = [
     "wxc-sdk>=1.30.0",
 ]
 
+[dependency-groups]
+dev = [
+    "commitizen>=4.13.9",
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.6",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -26,11 +33,27 @@ packages = ["src/wxc_cli"]
 line-length = 120
 src = ["src"]
 
-[tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+[tool.ruff.format]
+quote-style = "single"
 
-[dependency-groups]
-dev = [
-    "pre-commit>=4.5.1",
-    "ruff>=0.15.6",
+[tool.ruff.lint]
+ignore = ["E741", 'C901']
+select = [
+    "E",   # pycodestyle errors (flake8 core)
+    "W",   # pycodestyle warnings (flake8 core)
+    "F",   # pyflakes (flake8 core)
+    "C90", # mccabe complexity (flake8-mccabe)
+    "I",   # isort (flake8-isort)
+    # "N",   # pep8-naming (flake8-pep8-naming)
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
 ]
+
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_scheme = "semver"
+version_provider = "uv"   # reads/writes version in [project] table
+tag_format = "v$version"
+update_changelog_on_bump = true
+
