@@ -1,3 +1,10 @@
+## v0.2.1 (2026-03-16)
+
+### Fix
+
+- proper serialization for JSON rows
+- proper serialization for CSV rows
+
 ## v0.2.0 (2026-03-16)
 
 ### Feat

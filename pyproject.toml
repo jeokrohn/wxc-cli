@@ -1,6 +1,6 @@
 [project]
 name = "wxc-cli"
-version = "0.2.0"
+version = "0.2.1"
 description = "Auto-generated CLI for the wxc_sdk Webex SDK"
 authors = [{ name = "Johannes Krohn", email = "jkrohn@cisco.com" }]
 readme = "README.md"
