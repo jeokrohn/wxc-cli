@@ -1,3 +1,6 @@
+[![PyPI version](https://img.shields.io/pypi/v/wxc-cli.svg)](https://pypi.org/project/wxc-cli/)
+[![Python versions](https://img.shields.io/pypi/pyversions/wxc-cli.svg)](https://pypi.org/project/wxc-cli/)
+
 # wxc-cli
  
 Auto-generated CLI for [`wxc_sdk`](https://pypi.org/project/wxc_sdk/) — every API endpoint is

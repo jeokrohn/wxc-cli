@@ -2,8 +2,26 @@
 name = "wxc-cli"
 version = "0.2.0"
 description = "Auto-generated CLI for the wxc_sdk Webex SDK"
+authors = [{ name = "Johannes Krohn", email = "jkrohn@cisco.com" }]
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.14"
+keywords = ["webex", "cli", "wxc_sdk", "cisco", "webex-calling", "api"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Telecommunications Industry",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications",
+  "Topic :: Utilities",
+]
 dependencies = [
     "keyring>=25.7.0",
     "python-dotenv>=1.2.2",
@@ -19,12 +37,19 @@ dev = [
     "ruff>=0.15.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/jeokrohn/wxc-cli"
+Repository = "https://github.com/jeokrohn/wxc-cli"
+"Bug Tracker" = "https://github.com/jeokrohn/wxc-cli/issues"
+Changelog = "https://github.com/jeokrohn/wxc-cli/blob/main/CHANGELOG.md"
+
+[project.scripts]
+wxc-cli = "wxc_cli.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[project.scripts]
-wxc-cli = "wxc_cli.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wxc_cli"]
