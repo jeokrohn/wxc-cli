@@ -9,7 +9,7 @@ a command, wired up at startup by introspecting `WebexSimpleApi`.
 ## Install
  
 ```bash
-pip install wxc_cli
+pip install wxc-cli
 ```
  
 Or from source:
