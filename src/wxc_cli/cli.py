@@ -256,7 +256,7 @@ def _format_output(result: Any, output: str, max_items: int | None = None, field
         rows = []
         for item in items:
             if isinstance(item, BaseModel):
-                data = json.loads(item.model_dump_json(exclude_none=True))
+                data = item.model_dump(exclude_none=True, mode='json')
                 if fields:
                     data = {k: data[k] for k in fields if k in data}
                 rows.append(data)
