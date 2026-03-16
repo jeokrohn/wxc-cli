@@ -37,7 +37,10 @@ src = ["src"]
 quote-style = "single"
 
 [tool.ruff.lint]
-ignore = ["E741", 'C901']
+ignore = [
+    'C901',
+    "E741",
+]
 select = [
     "E",   # pycodestyle errors (flake8 core)
     "W",   # pycodestyle warnings (flake8 core)
@@ -49,6 +52,13 @@ select = [
     "UP",  # pyupgrade
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"src/wxc_cli/cli.py" = [
+    'B007',
+    'B904',
+    'F841',
+    'UP045',
+]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
