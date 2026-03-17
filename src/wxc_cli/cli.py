@@ -45,6 +45,8 @@ from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
 
+__version__ = 'v0.2.1'
+
 console = Console()
 
 # ---------------------------------------------------------------------------
@@ -239,7 +241,49 @@ def _flatten_for_csv(item: Any) -> dict[str, str]:
     return flat
 
 
-def _format_output(result: Any, output: str, max_items: int | None = None, fields: list[str] | None = None) -> None:
+def _format_raw(items: list, fields: list[str] | None) -> None:
+    """
+    Raw output — no Rich markup, no decorators, stdout only.
+
+    Rules:
+    - Single field requested (or single scalar result) -> one bare value per line
+    - Multiple fields (or no --fields on a model)      -> tab-separated values,
+                                                          one record per line,
+                                                          no header
+    - Non-model scalars (bool, str, int)               -> str(value) per line
+    - list/nested model fields                         -> JSON-encoded inline
+    """
+    import sys
+
+    out = sys.stdout
+
+    def _row(item: Any, wanted: list[str] | None) -> list[str]:
+        if isinstance(item, BaseModel):
+            d = item.model_dump()  # snake_case, keeps Nones
+            if wanted:
+                return [_cell(d.get(f)) for f in wanted]
+            # No --fields: emit only non-None scalar fields, tab-separated
+            return [_cell(v) for v in d.values() if v is not None]
+        return [str(item) if item is not None else '']
+
+    def _cell(v: Any) -> str:
+        if v is None:
+            return ''
+        if isinstance(v, (list, dict)):
+            return json.dumps(v, separators=(',', ':'))
+        return str(v)
+
+    for item in items:
+        cells = _row(item, fields)
+        if len(cells) == 1:
+            print(cells[0], file=out)
+        else:
+            print('\t'.join(cells), file=out)
+
+
+def _format_output(
+    result: Any, output: str, max_items: Optional[int] = None, fields: Optional[list[str]] = None
+) -> None:
     """Render a single model, list, or generator as table / json / csv."""
     import csv as _csv
     import sys
@@ -289,6 +333,11 @@ def _format_output(result: Any, output: str, max_items: int | None = None, field
         writer.writerows(flat_rows)
         if max_items and len(items) == max_items:
             rprint(f'[dim]# Results capped at {max_items} — increase with --max-items[/dim]', file=sys.stderr)
+        return
+
+    # ---- raw ----
+    if output == 'raw':
+        _format_raw(items, fields)
         return
 
     # ---- table (default) ----
@@ -474,7 +523,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         'Optional': Optional,
         'typer': typer,
         # global option defaults
-        '_output_default': typer.Option('table', '--output', '-o', help='Output format: table | json | csv'),
+        '_output_default': typer.Option('table', '--output', '-o', help='Output format: table | json | csv | raw'),
         '_max_items_default': typer.Option(
             None, '--max-items', '-n', help='Cap number of results (list commands)', min=1
         ),
@@ -839,7 +888,7 @@ def logout():
 
 @root_app.command()
 def completion(
-    shell: str | None = typer.Option(
+    shell: Optional[str] = typer.Option(
         None,
         '--shell',
         '-s',
@@ -932,7 +981,7 @@ def completion(
 
 @root_app.command()
 def schema(
-    model_name: str | None = typer.Argument(None, help='Model class name, e.g. CallQueue, CallForwarding'),
+    model_name: Optional[str] = typer.Argument(None, help='Model class name, e.g. CallQueue, CallForwarding'),
     output: str = typer.Option(
         'template',
         '--output',
@@ -1026,7 +1075,7 @@ def schema(
 
 @root_app.command()
 def whoami(
-    output: str = typer.Option('table', '--output', '-o', help='Output format: table | json | csv'),
+    output: str = typer.Option('table', '--output', '-o', help='Output format: table | json | csv | raw'),
 ):
     """Show the currently authenticated user."""
     tok = _resolve_token()
@@ -1062,6 +1111,30 @@ def build_cli() -> typer.Typer:
 
 
 app = build_cli()
+
+# ---------------------------------------------------------------------------
+# -v/--version: show version
+# ---------------------------------------------------------------------------
+
+
+def version_callback(value: bool):
+    if value:
+        typer.echo(f'wxc-cli version: {__version__}')
+        raise typer.Exit()
+
+
+@app.callback()
+def cb_main(
+    version: bool = typer.Option(
+        None,
+        '--version',
+        '-v',
+        help='Show the application version and exit.',
+        callback=version_callback,
+        is_eager=True,
+    ),
+):
+    pass
 
 
 def main():

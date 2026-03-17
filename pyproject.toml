@@ -91,4 +91,7 @@ version_scheme = "semver"
 version_provider = "uv"   # reads/writes version in [project] table
 tag_format = "v$version"
 update_changelog_on_bump = true
+version_files = [
+    "src/wxc_cli/cli.py"
+]
 
