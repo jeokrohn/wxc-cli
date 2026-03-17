@@ -44,6 +44,23 @@ wxc-cli people details --person-id Y2l… # single person
 wxc-cli telephony callqueue --help      # nested sub-APIs work too
 ```
 
+The [`wxc_sdk` supported endpoint list](https://wxc-sdk.readthedocs.io/en/latest/user/method_ref.html)  
+serves as a reference for the available commands. 
+
+If for example the `wxc_sdk` reference has an endpoint `api.person_settings.forwarding.read` then `wxc-cli` 
+supports `wxc-cli person-settings forwarding read` and
+`wxc-cli person-settings forwarding read --help` gives you an overview of the supported parameters. 
+
+The endpoint names in the 
+[`wxc_sdk` supported endpoint list](https://wxc-sdk.readthedocs.io/en/latest/user/method_ref.html) are 
+links to the actual function definitions for the respective endpoint. 
+
+For example, 
+[this](https://wxc-sdk.readthedocs.io/en/latest/apidoc/wxc_sdk.person_settings.forwarding.html#wxc_sdk.person_settings.forwarding.PersonForwardingApi.read) is the 
+documentation for the `api.person_settings.forwarding.read` endpoint which helps to understand the CLI parameters. 
+
+Note: The SDK uses snake-case names for endpoints and the CLI kebab-case names for commands.
+
 ### Output formats
 
 Every command accepts `--output table` (default), `--output json`, `--output csv`, or `--output raw`.
