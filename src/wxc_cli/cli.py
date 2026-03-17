@@ -45,7 +45,7 @@ from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
 
-__version__ = 'v0.3.0'
+__version__ = 'v0.3.1'
 
 console = Console()
 
