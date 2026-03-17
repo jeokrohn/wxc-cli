@@ -44,8 +44,7 @@ wxc-cli people details --person-id Y2l… # single person
 wxc-cli telephony callqueue --help      # nested sub-APIs work too
 ```
 
-The [`wxc_sdk` supported endpoint list](https://wxc-sdk.readthedocs.io/en/latest/user/method_ref.html)  
-serves as a reference for the available commands. 
+The [`wxc_sdk` supported endpoint list](https://wxc-sdk.readthedocs.io/en/latest/user/method_ref.html) serves as a reference for the available commands. 
 
 If for example the `wxc_sdk` reference has an endpoint `api.person_settings.forwarding.read` then `wxc-cli` 
 supports `wxc-cli person-settings forwarding read` and
