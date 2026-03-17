@@ -71,7 +71,7 @@ wxc-cli people create \
 | `--fields person_id,display_name` (multiple) | tab-separated, one record per line          |
 | no `--fields`                                | all non-None fields, tab-separated          |
 | `list[scalar]` or nested model in a field    | JSON-encoded inline                         |
-| scalar return (`bool`, `str`, `int`)         | `str(value`                                 |
+| scalar return (`bool`, `str`, `int`)         | `str(value)`                                |
 
 Typical shell patterns:
 
@@ -89,6 +89,11 @@ wxc-cli rooms list -o raw --fields title,type | awk -F'\t' '$2=="direct" {print 
 wxc-cli people list --display-name Alice -o raw --fields person_id \
   | xargs -I{} wxc-cli person-settings forwarding read --entity-id {} -o json \
   | jq '.call_forwarding.always'
+  
+# command substitution
+wxc-cli people list --calling-data --fields display_name,emails \
+  --location-id $(wxc-cli locations list --name Hartford --fields location_id -o raw)
+
 ```
 
 ## How it works
