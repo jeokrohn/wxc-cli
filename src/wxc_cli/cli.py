@@ -1120,6 +1120,7 @@ app = build_cli()
 def version_callback(value: bool):
     if value:
         typer.echo(f'wxc-cli version: {__version__}')
+        typer.echo(f'wxc-sdk version: {wxc_sdk.__version__}')
         raise typer.Exit()
 
 

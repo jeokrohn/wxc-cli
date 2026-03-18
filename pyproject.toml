@@ -8,19 +8,19 @@ license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.14"
 keywords = ["webex", "cli", "wxc_sdk", "cisco", "webex-calling", "api"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
-  "Environment :: Console",
-  "Intended Audience :: Developers",
-  "Intended Audience :: Telecommunications Industry",
-  "License :: OSI Approved :: MIT License",
-  "Operating System :: OS Independent",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: 3.13",
-  "Topic :: Communications",
-  "Topic :: Utilities",
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Telecommunications Industry",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications",
+    "Topic :: Utilities",
 ]
 dependencies = [
     "keyring>=25.7.0",
@@ -54,6 +54,16 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/wxc_cli"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/Makefile",
+    "/pyproject.toml",
+    "/README.md",
+]
+
 [tool.ruff]
 line-length = 120
 src = ["src"]
@@ -67,14 +77,14 @@ ignore = [
     "E741",
 ]
 select = [
-    "E",   # pycodestyle errors (flake8 core)
-    "W",   # pycodestyle warnings (flake8 core)
-    "F",   # pyflakes (flake8 core)
+    "E", # pycodestyle errors (flake8 core)
+    "W", # pycodestyle warnings (flake8 core)
+    "F", # pyflakes (flake8 core)
     "C90", # mccabe complexity (flake8-mccabe)
-    "I",   # isort (flake8-isort)
+    "I", # isort (flake8-isort)
     # "N",   # pep8-naming (flake8-pep8-naming)
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
+    "B", # flake8-bugbear
+    "UP", # pyupgrade
 ]
 
 [tool.ruff.lint.per-file-ignores]
