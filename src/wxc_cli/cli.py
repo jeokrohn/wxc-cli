@@ -886,97 +886,97 @@ def logout():
         rprint('[yellow]No stored token found (or keyring unavailable).[/yellow]')
 
 
-@root_app.command()
-def completion(
-    shell: Optional[str] = typer.Option(
-        None,
-        '--shell',
-        '-s',
-        help='Shell type: bash | zsh | fish. Auto-detected from $SHELL if omitted.',
-    ),
-    install: bool = typer.Option(
-        False, '--install', is_flag=True, help='Write the script to the appropriate rc file automatically.'
-    ),
-):
-    """
-    Print or install shell completion for wxc-cli.
-
-    Usage:
-      wxc-cli completion          # auto-detect shell, print script
-      wxc-cli completion bash     # print bash script
-      wxc-cli completion --install  # write to ~/.bashrc / ~/.zshrc / ~/.config/fish/...
-    """
-    # Auto-detect shell from $SHELL if not given
-    if shell is None:
-        shell_path = os.environ.get('SHELL', '')
-        shell = os.path.basename(shell_path)
-        if shell not in ('bash', 'zsh', 'fish'):
-            rprint('[red]Could not auto-detect shell. Pass bash, zsh, or fish explicitly.[/red]')
-            raise typer.Exit(1)
-
-    shell = shell.lower()
-    if shell not in ('bash', 'zsh', 'fish'):
-        rprint(f"[red]Unsupported shell '{shell}'. Choose bash, zsh, or fish.[/red]")
-        raise typer.Exit(1)
-
-    # Generate via Click's ShellComplete, explicitly naming the program "wxc-cli".
-    # This is the reliable path: it never reads sys.argv[0], so the script is
-    # always correct regardless of how the user originally invoked the CLI.
-    complete_var = f'_{_PROG_NAME.upper()}_COMPLETE'
-    try:
-        from click.shell_completion import BashComplete, FishComplete, ZshComplete
-
-        _cls = {'bash': BashComplete, 'zsh': ZshComplete, 'fish': FishComplete}[shell]
-        cli_obj = typer.main.get_command(app)
-        script = _cls(cli_obj, {}, _PROG_NAME, complete_var).source()
-    except Exception as e:
-        rprint(f'[red]Could not generate completion script: {e}[/red]')
-        raise typer.Exit(1) from e
-
-    if not install:
-        rprint(script)
-        rprint()
-        if shell == 'bash':
-            rprint('[dim]# Add to ~/.bashrc:[/dim]')
-            rprint('[dim]#   eval "$(wxc-cli completion --shell bash)"[/dim]')
-        elif shell == 'zsh':
-            rprint('[dim]# Add to ~/.zshrc:[/dim]')
-            rprint('[dim]#   eval "$(wxc-cli completion --shell zsh)"[/dim]')
-        elif shell == 'fish':
-            rprint('[dim]# Add to ~/.config/fish/completions/wxc-cli.fish:[/dim]')
-            rprint('[dim]#   wxc-cli completion --shell fish > ~/.config/fish/completions/wxc-cli.fish[/dim]')
-        return
-
-    # --install: write to the appropriate rc file
-    home = os.path.expanduser('~')
-    if shell == 'bash':
-        rc = os.path.join(home, '.bashrc')
-        line = 'eval "$(wxc-cli completion --shell bash)"'
-    elif shell == 'zsh':
-        rc = os.path.join(home, '.zshrc')
-        line = 'eval "$(wxc-cli completion --shell zsh)"'
-    elif shell == 'fish':
-        fish_dir = os.path.join(home, '.config', 'fish', 'completions')
-        os.makedirs(fish_dir, exist_ok=True)
-        rc = os.path.join(fish_dir, 'wxc-cli.fish')
-        with open(rc, 'w') as f:
-            f.write(script + '\n')
-        rprint(f'[green]✓ Completion written to {rc}[/green]')
-        return
-
-    # bash / zsh: add eval line to rc if not already there
-    try:
-        existing = open(rc).read() if os.path.exists(rc) else ''
-        if line in existing:
-            rprint(f'[yellow]Completion already present in {rc}[/yellow]')
-        else:
-            with open(rc, 'a') as f:
-                f.write(f'\n# wxc-cli shell completion\n{line}\n')
-            rprint(f'[green]✓ Added to {rc}[/green]')
-            rprint(f'[dim]Restart your shell or run: source {rc}[/dim]')
-    except OSError as e:
-        rprint(f'[red]Could not write to {rc}: {e}[/red]')
-        raise typer.Exit(1)
+# @root_app.command()
+# def completion(
+#     shell: Optional[str] = typer.Option(
+#         None,
+#         '--shell',
+#         '-s',
+#         help='Shell type: bash | zsh | fish. Auto-detected from $SHELL if omitted.',
+#     ),
+#     install: bool = typer.Option(
+#         False, '--install', is_flag=True, help='Write the script to the appropriate rc file automatically.'
+#     ),
+# ):
+#     """
+#     Print or install shell completion for wxc-cli.
+#
+#     Usage:
+#       wxc-cli completion          # auto-detect shell, print script
+#       wxc-cli completion bash     # print bash script
+#       wxc-cli completion --install  # write to ~/.bashrc / ~/.zshrc / ~/.config/fish/...
+#     """
+#     # Auto-detect shell from $SHELL if not given
+#     if shell is None:
+#         shell_path = os.environ.get('SHELL', '')
+#         shell = os.path.basename(shell_path)
+#         if shell not in ('bash', 'zsh', 'fish'):
+#             rprint('[red]Could not auto-detect shell. Pass bash, zsh, or fish explicitly.[/red]')
+#             raise typer.Exit(1)
+#
+#     shell = shell.lower()
+#     if shell not in ('bash', 'zsh', 'fish'):
+#         rprint(f"[red]Unsupported shell '{shell}'. Choose bash, zsh, or fish.[/red]")
+#         raise typer.Exit(1)
+#
+#     # Generate via Click's ShellComplete, explicitly naming the program "wxc-cli".
+#     # This is the reliable path: it never reads sys.argv[0], so the script is
+#     # always correct regardless of how the user originally invoked the CLI.
+#     complete_var = f'_{_PROG_NAME.upper()}_COMPLETE'
+#     try:
+#         from click.shell_completion import BashComplete, FishComplete, ZshComplete
+#
+#         _cls = {'bash': BashComplete, 'zsh': ZshComplete, 'fish': FishComplete}[shell]
+#         cli_obj = typer.main.get_command(app)
+#         script = _cls(cli_obj, {}, _PROG_NAME, complete_var).source()
+#     except Exception as e:
+#         rprint(f'[red]Could not generate completion script: {e}[/red]')
+#         raise typer.Exit(1) from e
+#
+#     if not install:
+#         rprint(script)
+#         rprint()
+#         if shell == 'bash':
+#             rprint('[dim]# Add to ~/.bashrc:[/dim]')
+#             rprint('[dim]#   eval "$(wxc-cli completion --shell bash)"[/dim]')
+#         elif shell == 'zsh':
+#             rprint('[dim]# Add to ~/.zshrc:[/dim]')
+#             rprint('[dim]#   eval "$(wxc-cli completion --shell zsh)"[/dim]')
+#         elif shell == 'fish':
+#             rprint('[dim]# Add to ~/.config/fish/completions/wxc-cli.fish:[/dim]')
+#             rprint('[dim]#   wxc-cli completion --shell fish > ~/.config/fish/completions/wxc-cli.fish[/dim]')
+#         return
+#
+#     # --install: write to the appropriate rc file
+#     home = os.path.expanduser('~')
+#     if shell == 'bash':
+#         rc = os.path.join(home, '.bashrc')
+#         line = 'eval "$(wxc-cli completion --shell bash)"'
+#     elif shell == 'zsh':
+#         rc = os.path.join(home, '.zshrc')
+#         line = 'eval "$(wxc-cli completion --shell zsh)"'
+#     elif shell == 'fish':
+#         fish_dir = os.path.join(home, '.config', 'fish', 'completions')
+#         os.makedirs(fish_dir, exist_ok=True)
+#         rc = os.path.join(fish_dir, 'wxc-cli.fish')
+#         with open(rc, 'w') as f:
+#             f.write(script + '\n')
+#         rprint(f'[green]✓ Completion written to {rc}[/green]')
+#         return
+#
+#     # bash / zsh: add eval line to rc if not already there
+#     try:
+#         existing = open(rc).read() if os.path.exists(rc) else ''
+#         if line in existing:
+#             rprint(f'[yellow]Completion already present in {rc}[/yellow]')
+#         else:
+#             with open(rc, 'a') as f:
+#                 f.write(f'\n# wxc-cli shell completion\n{line}\n')
+#             rprint(f'[green]✓ Added to {rc}[/green]')
+#             rprint(f'[dim]Restart your shell or run: source {rc}[/dim]')
+#     except OSError as e:
+#         rprint(f'[red]Could not write to {rc}: {e}[/red]')
+#         raise typer.Exit(1)
 
 
 @root_app.command()
