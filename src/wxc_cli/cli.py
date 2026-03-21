@@ -531,6 +531,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         '_dry_run_default': typer.Option(
             False, '--dry-run', is_flag=True, help='Print the SDK call without executing it'
         ),
+        '_token_default': typer.Option(None, '--token', help='Access token to use'),
     }
 
     for _pn, _mc in pydantic_params.items():
@@ -553,6 +554,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         '    max_items: Optional[int] = _max_items_default,',
         '    fields: Optional[str] = _fields_default,',
         '    dry_run: bool = _dry_run_default,',
+        '    token: Optional[str] = _token_default,',
     ]
     for _pn in pydantic_params:
         _pk = f'{_pn}__patch'
@@ -632,9 +634,9 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
     captured_pydantic = pydantic_params
     captured_pydantic_flat = pydantic_flat
 
-    def _resolve_method() -> Callable:
+    def _resolve_method(arg_token) -> Callable:
         """Instantiate a fresh API with the current token and navigate to the method."""
-        tok = _resolve_token()
+        tok = arg_token or _resolve_token()
         if not tok:
             rprint('[red]Not authenticated. Run `wxc-cli login` or set WEBEX_ACCESS_TOKEN.[/red]')
             raise typer.Exit(1)
@@ -649,6 +651,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         max_items_raw = kw.pop('max_items', None)
         fields_raw = kw.pop('fields', None)
         dry_run = kw.pop('dry_run', False)
+        token = kw.pop('token', None)
 
         max_items = int(max_items_raw) if max_items_raw is not None else None
         fields = [f.strip() for f in fields_raw.split(',')] if fields_raw else None
@@ -733,7 +736,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         # Resolve any --patch args now (requires a live API read)
         for _ppname, (_pmodel_cls, _ppatch_dict) in _pending_patches.items():
             try:
-                _reader = _find_reader(_resolve_method, _pmodel_cls)
+                _reader = _find_reader(functools.partial(_resolve_method, token), _pmodel_cls)
                 _reader_sig = inspect.signature(_reader)
                 _reader_kw = {}
                 for _spn, _sp in captured_usable:
@@ -751,7 +754,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
                 raise typer.Exit(1) from e
 
         try:
-            result = _resolve_method()(**call_kw)
+            result = _resolve_method(token)(**call_kw)
         except Exception as e:
             rprint(f'[red]{type(e).__name__}: {e}[/red]')
             raise typer.Exit(1) from e
