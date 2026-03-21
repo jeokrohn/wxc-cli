@@ -198,8 +198,10 @@ def _keyring_integration_get_tokens(keyring_int: KeyringIntegration) -> Tokens |
     )
     changed = False
     if keyring_int.tokens and keyring_int.tokens.access_token:
-        # validate access token and refresh if needed
-        changed = integration.validate_tokens(keyring_int.tokens)
+        # validate access token and refresh if needed (less than 25% of the initial lifetime remaining)
+        changed = integration.validate_tokens(
+            keyring_int.tokens, min_lifetime_seconds=int(keyring_int.tokens.expires_in / 4)
+        )
     if not (keyring_int.tokens and keyring_int.tokens.access_token):
         # get new tokens from OAuth flow
         keyring_int.tokens = integration.get_tokens_from_oauth_flow()
