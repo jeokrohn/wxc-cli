@@ -28,22 +28,25 @@ Usage examples:
   wxc-cli telephony calls list-calls --dry-run
 """
 
-from __future__ import annotations
-
 import collections.abc
 import inspect
 import json
 import os
 import typing
 from collections.abc import Callable
-from typing import Any, Optional
+from json import JSONDecodeError
+from typing import Annotated, Any, Optional
 
 import typer
 import wxc_sdk
-from pydantic import BaseModel
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
+from wxc_sdk.integration import Integration
+from wxc_sdk.scopes import parse_scopes
+from wxc_sdk.tokens import Tokens
 
 __version__ = 'v0.3.1'
 
@@ -82,6 +85,7 @@ _RESERVED_PARAM_NAMES = frozenset(
 )
 _KEYRING_SERVICE = 'wxc-cli'
 _KEYRING_USER = 'access-token'
+_KEYRING_INTEGRATION_USER = 'integration'
 
 
 # ---------------------------------------------------------------------------
@@ -89,38 +93,120 @@ _KEYRING_USER = 'access-token'
 # ---------------------------------------------------------------------------
 
 
-def _keyring_get() -> str | None:
+def _keyring_get(user: str = _KEYRING_USER, raise_exc: bool = False) -> str | None:
     try:
         import keyring
 
-        return keyring.get_password(_KEYRING_SERVICE, _KEYRING_USER)
+        return keyring.get_password(_KEYRING_SERVICE, user)
     except Exception:
+        if raise_exc:
+            raise
         return None
 
 
-def _keyring_set(token: str) -> bool:
+def _keyring_set(token: str, user: str = _KEYRING_USER) -> bool:
     try:
         import keyring
 
-        keyring.set_password(_KEYRING_SERVICE, _KEYRING_USER, token)
+        keyring.set_password(_KEYRING_SERVICE, user, token)
         return True
     except Exception:
         return False
 
 
-def _keyring_delete() -> bool:
+def _keyring_delete(user: str = _KEYRING_USER) -> bool:
     try:
         import keyring
 
-        keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USER)
+        keyring.delete_password(_KEYRING_SERVICE, user)
         return True
     except Exception:
         return False
 
 
 def _resolve_token() -> str | None:
-    """Return a token from env → keyring, in that order."""
-    return os.environ.get('WEBEX_ACCESS_TOKEN') or _keyring_get()
+    """Return a token from integration → keyring → env, in that order."""
+    int_data = _keyring_integration_get()
+    tokens = _keyring_integration_get_tokens(int_data)
+    return tokens and tokens.access_token or _keyring_get() or os.environ.get('WEBEX_ACCESS_TOKEN')
+
+
+# ---------------------------------------------------------------------------
+# Helpers for keyring backed integration token cache
+# ---------------------------------------------------------------------------
+
+
+class KeyringIntegration(BaseModel):
+    """
+    Data to be persisted in KeyRing (as JSON)
+    """
+
+    client_id: str = Field(None)
+    client_secret: str = Field(None)
+    scopes: str = Field(None)
+    tokens: Tokens | None = Field(None)
+
+    @field_validator('scopes', mode='after')
+    def validate_scopes(cls, v):
+        return parse_scopes(v)
+
+
+def _keyring_integration_get(raise_exc: bool = False) -> KeyringIntegration:
+    """
+    Get cached integration data from keyring
+    """
+    try:
+        key_ring_data = _keyring_get(_KEYRING_INTEGRATION_USER)
+    except Exception:
+        if raise_exc:
+            raise
+        else:
+            return None
+    try:
+        return KeyringIntegration().model_validate_json(key_ring_data)
+    except (JSONDecodeError, ValidationError, TypeError):
+        return KeyringIntegration()
+
+
+def _keyring_integration_set(keyring_int: KeyringIntegration) -> bool:
+    """
+    Persist integration data to keyring
+    """
+    try:
+        import keyring
+
+        data = keyring_int.model_dump_json()
+        keyring.set_password(_KEYRING_SERVICE, _KEYRING_INTEGRATION_USER, data)
+        return True
+    except Exception:
+        return False
+
+
+def _keyring_integration_get_tokens(keyring_int: KeyringIntegration) -> Tokens | None:
+    """
+    Validate and return cached integration tokens
+    * Refresh if needed
+    * initiate OAuth flow if needed
+    """
+    if not all((keyring_int.client_id, keyring_int.client_secret, keyring_int.scopes)):
+        return None
+    integration = Integration(
+        client_id=keyring_int.client_id,
+        client_secret=keyring_int.client_secret,
+        scopes=keyring_int.scopes,
+        redirect_url='http://localhost:6001/redirect',
+    )
+    changed = False
+    if keyring_int.tokens and keyring_int.tokens.access_token:
+        # validate access token and refresh if needed
+        changed = integration.validate_tokens(keyring_int.tokens)
+    if not (keyring_int.tokens and keyring_int.tokens.access_token):
+        # get new tokens from OAuth flow
+        keyring_int.tokens = integration.get_tokens_from_oauth_flow()
+        changed = True
+    if changed:
+        _keyring_integration_set(keyring_int)
+    return keyring_int.tokens
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +573,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
       --max-items N           cap generator results
       --fields f1,f2,f3       choose which model fields to display
       --dry-run               print the call without executing it
+      --token                 use a specific token
 
     Per-param options:
       Scalar types            → --param-name option
@@ -786,7 +873,7 @@ def _register_api_group(parent: typer.Typer, name: str, api_obj: Any, api_path: 
         no_args_is_help=True,
         rich_markup_mode='rich',
     )
-    parent.add_typer(group, name=name.replace('_', '-'))
+    parent.add_typer(group, name=name.replace('_', '-'), rich_help_panel='APIs')
 
     # The dotted path from the root API to this object, e.g. "telephony.calls"
     current_path = f'{api_path}.{name}' if api_path else name
@@ -826,6 +913,7 @@ root_app = typer.Typer(
     name='wxc-cli',
     help='[bold]Webex CLI[/bold] — every wxc_sdk endpoint as a command.\n\n'
     'Set [bold cyan]WEBEX_ACCESS_TOKEN[/bold cyan], run [bold]wxc-cli login[/bold], '
+    'run [bold]wxc-cli integration setup[/bold] '
     'or pass [bold]--token[/bold].',
     no_args_is_help=True,
     rich_markup_mode='rich',
@@ -837,27 +925,8 @@ root_app = typer.Typer(
 _PROG_NAME = 'wxc-cli'
 
 
-@root_app.callback()
-def _root(
-    token: str | None = typer.Option(
-        None,
-        '--token',
-        '-t',
-        help='Webex access token (overrides env / keyring)',
-        envvar='WEBEX_ACCESS_TOKEN',
-        show_default=False,
-    ),
-):
-    if token:
-        os.environ['WEBEX_ACCESS_TOKEN'] = token
-    else:
-        stored = _keyring_get()
-        if stored:
-            os.environ['WEBEX_ACCESS_TOKEN'] = stored
-
-
 # ---------------------------------------------------------------------------
-# Built-in commands (login / logout / whoami)
+# Built-in commands (login / logout / whoami / ...)
 # ---------------------------------------------------------------------------
 
 
@@ -1094,6 +1163,85 @@ def whoami(
         raise typer.Exit(1) from e
 
 
+#
+# group for integration options
+#
+int_app = typer.Typer(invoke_without_command=True)
+root_app.add_typer(int_app, name='integration', help='integration operations: show (default), setup, reset')
+
+
+@int_app.callback()
+def int_callback(ctx: typer.Context):
+    """Integration callback."""
+    if ctx.invoked_subcommand is None:
+        int_show()
+
+
+@int_app.command('show')
+def int_show():
+    """Show integration details"""
+    kd = _keyring_integration_get()
+    rprint(f'                client id: {kd.client_id}')
+    if kd.tokens:
+        rprint(f' access token valid until: {kd.tokens.expires_at}')
+        rprint(f'refresh token valid until: {kd.tokens.refresh_token_expires_at}')
+    else:
+        rprint('[red]No tokens found.[/red]')
+    raise typer.Exit(0)
+
+
+@int_app.command('setup')
+def int_setup(
+    client_id: Annotated[str, typer.Option(help='Client ID')] = None,
+    client_secret: Annotated[str, typer.Option(help='Client secret')] = None,
+    scopes: Annotated[str, typer.Option(help='Scopes')] = None,
+):
+    """Setup integration"""
+    # check if keyring is available
+    try:
+        keyring_data = _keyring_integration_get(raise_exc=True)
+    except Exception:
+        rprint('[red]Failed to load keyring. Integration support requires keyring.[/red]')
+        raise typer.Exit(1)
+
+    if not all((client_id, client_secret, scopes)):
+        # At least one input is missing
+        # user input with defaults:
+        #   1) input from command line
+        #   2) value from keyring
+        #   3) value from environment
+        client_id = typer.prompt(
+            '[cyan]Client ID[/cyan]',
+            default=client_id or keyring_data.client_id or os.environ.get('INTEGRATION_CLIENT_ID'),
+        )
+        client_secret = typer.prompt(
+            '[cyan]Client Secret[/cyan]',
+            default=client_secret or keyring_data.client_secret or os.environ.get('INTEGRATION_CLIENT_SECRET'),
+        )
+        scopes = typer.prompt(
+            '[cyan]Scopes[/cyan]',
+            default=parse_scopes(scopes or keyring_data.scopes or os.environ.get('INTEGRATION_SCOPES')),
+        )
+        # write back inputs to keyring
+        keyring_data.client_id = client_id
+        keyring_data.client_secret = client_secret
+        keyring_data.scopes = scopes
+        _keyring_integration_set(keyring_data)
+
+    # initiate OAuth flow to get tokens
+    _keyring_integration_get_tokens(keyring_data)
+
+    int_show()
+
+
+@int_app.command('reset')
+def int_reset():
+    """Reset integration"""
+    _keyring_delete(_KEYRING_INTEGRATION_USER)
+    rprint('[green]Integration reset. Tokens deleted.[/green]')
+    raise typer.Exit(0)
+
+
 # ---------------------------------------------------------------------------
 # CLI builder
 # ---------------------------------------------------------------------------
@@ -1146,4 +1294,5 @@ def main():
 
 
 if __name__ == '__main__':
+    load_dotenv(override=True)
     main()
