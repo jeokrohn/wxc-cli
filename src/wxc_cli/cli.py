@@ -372,7 +372,7 @@ def _format_raw(items: list, fields: list[str] | None) -> None:
 def _format_output(
     result: Any, output: str, max_items: Optional[int] = None, fields: Optional[list[str]] = None
 ) -> None:
-    """Render a single model, list, or generator as table / json / csv."""
+    """Render a single model, list, or generator as table / json / csv / raw."""
     import csv as _csv
     import sys
 
@@ -454,7 +454,7 @@ def _format_output(
         hidden = len(all_fields) - len(show)
         hints = []
         if hidden > 0 and not fields:
-            hints.append(f'[dim]+{hidden} hidden fields — use --fields or --output json/csv[/dim]')
+            hints.append(f'[dim]+{hidden} hidden fields — use --fields or --output json/csv/raw[/dim]')
         if max_items and len(items) == max_items:
             hints.append(f'[dim]Results capped at {max_items} — increase with --max-items[/dim]')
         for h in hints:
