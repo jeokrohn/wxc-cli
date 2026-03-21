@@ -1,3 +1,13 @@
+## v0.4.0 (2026-03-21)
+
+### Feat
+
+- integration token support
+
+### Fix
+
+- add --token option to each command
+
 ## v0.3.1 (2026-03-17)
 
 ### Fix
