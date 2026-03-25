@@ -33,7 +33,7 @@ import inspect
 import json
 import os
 import typing
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from json import JSONDecodeError
 from typing import Annotated, Any, Optional
 
@@ -127,6 +127,8 @@ def _keyring_delete(user: str = _KEYRING_USER) -> bool:
 def _resolve_token() -> str | None:
     """Return a token from integration → keyring → env, in that order."""
     int_data = _keyring_integration_get()
+    if int_data is None:
+        return None
     tokens = _keyring_integration_get_tokens(int_data)
     return tokens and tokens.access_token or _keyring_get() or os.environ.get('WEBEX_ACCESS_TOKEN')
 
@@ -141,17 +143,17 @@ class KeyringIntegration(BaseModel):
     Data to be persisted in KeyRing (as JSON)
     """
 
-    client_id: str = Field(None)
-    client_secret: str = Field(None)
-    scopes: str = Field(None)
-    tokens: Tokens | None = Field(None)
+    client_id: Optional[str] = Field(None)
+    client_secret: Optional[str] = Field(None)
+    scopes: Optional[str] = Field(None)
+    tokens: Optional[Tokens] = Field(None)
 
     @field_validator('scopes', mode='after')
-    def validate_scopes(cls, v):
+    def validate_scopes(cls, v: str) -> Optional[str]:
         return parse_scopes(v)
 
 
-def _keyring_integration_get(raise_exc: bool = False) -> KeyringIntegration:
+def _keyring_integration_get(raise_exc: bool = False) -> Optional[KeyringIntegration]:
     """
     Get cached integration data from keyring
     """
@@ -163,9 +165,9 @@ def _keyring_integration_get(raise_exc: bool = False) -> KeyringIntegration:
         else:
             return None
     try:
-        return KeyringIntegration().model_validate_json(key_ring_data)
+        return KeyringIntegration.model_validate_json(key_ring_data)  # type: ignore[arg-type]
     except (JSONDecodeError, ValidationError, TypeError):
-        return KeyringIntegration()
+        return KeyringIntegration()  # type: ignore[call-arg]
 
 
 def _keyring_integration_set(keyring_int: KeyringIntegration) -> bool:
@@ -182,7 +184,7 @@ def _keyring_integration_set(keyring_int: KeyringIntegration) -> bool:
         return False
 
 
-def _keyring_integration_get_tokens(keyring_int: KeyringIntegration) -> Tokens | None:
+def _keyring_integration_get_tokens(keyring_int: KeyringIntegration, *, refresh: bool = False) -> Tokens | None:
     """
     Validate and return cached integration tokens
     * Refresh if needed
@@ -191,17 +193,19 @@ def _keyring_integration_get_tokens(keyring_int: KeyringIntegration) -> Tokens |
     if not all((keyring_int.client_id, keyring_int.client_secret, keyring_int.scopes)):
         return None
     integration = Integration(
-        client_id=keyring_int.client_id,
-        client_secret=keyring_int.client_secret,
-        scopes=keyring_int.scopes,
+        client_id=keyring_int.client_id,  # type: ignore[arg-type]
+        client_secret=keyring_int.client_secret,  # type: ignore[arg-type]
+        scopes=keyring_int.scopes,  # type: ignore[arg-type]
         redirect_url='http://localhost:6001/redirect',
     )
     changed = False
     if keyring_int.tokens and keyring_int.tokens.access_token:
         # validate access token and refresh if needed (less than 25% of the initial lifetime remaining)
-        changed = integration.validate_tokens(
-            keyring_int.tokens, min_lifetime_seconds=int(keyring_int.tokens.expires_in / 4)
-        )
+        if refresh:
+            min_lifetime = keyring_int.tokens.expires_in + 10  # type: ignore[operator]
+        else:
+            min_lifetime = int(keyring_int.tokens.expires_in / 4)  # type: ignore[operator]
+        changed = integration.validate_tokens(keyring_int.tokens, min_lifetime_seconds=min_lifetime)
     if not (keyring_int.tokens and keyring_int.tokens.access_token):
         # get new tokens from OAuth flow
         keyring_int.tokens = integration.get_tokens_from_oauth_flow()
@@ -221,7 +225,7 @@ def _is_sub_api(obj: Any) -> bool:
     return 'Api' in name or name.endswith('API')
 
 
-def _scalar_cli_type(annotation: Any) -> type:
+def _scalar_cli_type(annotation: type) -> type:
     if annotation in (str, int, float, bool):
         return annotation
     origin = typing.get_origin(annotation)
@@ -329,7 +333,7 @@ def _flatten_for_csv(item: Any) -> dict[str, str]:
     return flat
 
 
-def _format_raw(items: list, fields: list[str] | None) -> None:
+def _format_raw(items: list[Any], fields: list[str] | None) -> None:
     """
     Raw output — no Rich markup, no decorators, stdout only.
 
@@ -464,7 +468,7 @@ def _format_output(
             rprint(item)
 
 
-def _take(gen: collections.abc.Generator, n: int) -> list:
+def _take(gen: collections.abc.Generator[Any, None, None], n: int) -> list[Any]:
     result = []
     for item in gen:
         result.append(item)
@@ -478,7 +482,7 @@ def _take(gen: collections.abc.Generator, n: int) -> list:
 # ---------------------------------------------------------------------------
 
 
-def _deep_merge(base: dict, patch: dict) -> dict:
+def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     result = dict(base)
     for k, v in patch.items():
         if isinstance(v, dict) and isinstance(result.get(k), dict):
@@ -503,7 +507,7 @@ def _resolve_json_arg(raw: str) -> str:
     return raw
 
 
-def _make_template(cls, _depth: int = 0) -> dict:
+def _make_template(cls: type[BaseModel], _depth: int = 0) -> dict[str, Any]:
     import enum as _enum
 
     result = {}
@@ -520,17 +524,17 @@ def _make_template(cls, _depth: int = 0) -> dict:
             vals = [e.value for e in ann]
             result[fname] = [vals[0]] if is_list else vals[0]
         elif ann is bool:
-            result[fname] = [] if is_list else False
+            result[fname] = [] if is_list else False  # type: ignore[assignment]
         elif ann is int:
-            result[fname] = [] if is_list else 0
+            result[fname] = [] if is_list else 0  # type: ignore[assignment]
         elif ann is str:
-            result[fname] = [] if is_list else ''
+            result[fname] = [] if is_list else ''  # type: ignore[assignment]
         else:
-            result[fname] = [] if is_list else None
+            result[fname] = [] if is_list else None  # type: ignore[assignment]
     return result
 
 
-def _get_single_model_return(sig):
+def _get_single_model_return(sig: inspect.Signature) -> Optional[type[BaseModel]]:
     ret = sig.return_annotation
     if ret is inspect.Parameter.empty:
         return None
@@ -542,7 +546,7 @@ def _get_single_model_return(sig):
     return None
 
 
-def _find_reader(resolve_method_fn, model_cls):
+def _find_reader(resolve_method_fn: Callable[..., Any], model_cls: type) -> Callable[..., Any]:
     writer = resolve_method_fn()
     api_obj = writer.__self__
     for mname, method in inspect.getmembers(api_obj, predicate=inspect.ismethod):
@@ -566,7 +570,7 @@ def _find_reader(resolve_method_fn, model_cls):
 # ---------------------------------------------------------------------------
 
 
-def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Callable:
+def _build_command_fn(method: Callable[..., Any], api_path: str, method_name: str) -> Callable[..., Any]:
     """
     Synthesise a real Python function with named keyword-only parameters.
 
@@ -723,7 +727,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
     captured_pydantic = pydantic_params
     captured_pydantic_flat = pydantic_flat
 
-    def _resolve_method(arg_token) -> Callable:
+    def _resolve_method(arg_token: Optional[str]) -> Callable[..., Any]:
         """Instantiate a fresh API with the current token and navigate to the method."""
         tok = arg_token or _resolve_token()
         if not tok:
@@ -746,7 +750,7 @@ def _build_command_fn(method: Callable, api_path: str, method_name: str) -> Call
         fields = [f.strip() for f in fields_raw.split(',')] if fields_raw else None
 
         # Patches are collected here first; resolved after dry-run check
-        _pending_patches: dict[str, tuple] = {}  # pname -> (model_cls, patch_dict)
+        _pending_patches: dict[str, tuple[type[BaseModel], dict[str, Any]]] = {}  # pname -> (model_cls, patch_dict)
         call_kw: dict[str, Any] = {}
 
         for pname, _param in captured_usable:
@@ -942,7 +946,7 @@ def login(
         prompt='Webex access token',
         hide_input=True,
     ),
-):
+) -> None:
     """Store a Webex access token in the system keyring."""
     if _keyring_set(token):
         os.environ['WEBEX_ACCESS_TOKEN'] = token
@@ -952,7 +956,7 @@ def login(
 
 
 @root_app.command()
-def logout():
+def logout() -> None:
     """Remove the stored Webex access token from the keyring."""
     if _keyring_delete():
         rprint('[green]✓ Token removed.[/green]')
@@ -1063,7 +1067,7 @@ def schema(
         help='Output: template (editable JSON with defaults) | schema (JSON Schema)',
     ),
     list_models: bool = typer.Option(False, '--list', '-l', is_flag=True, help='List all available model names'),
-):
+) -> None:
     """Print a JSON template or JSON Schema for any wxc_sdk model.
 
     Use this to build input files for --*-json @file flags.
@@ -1079,7 +1083,7 @@ def schema(
     import wxc_sdk as _wxc_root
 
     # Shared: walk all modules collecting BaseModel subclasses
-    def _all_models():
+    def _all_models() -> Generator[str, None, None]:
         seen = set()
         for _importer, modname, _ispkg in pkgutil.walk_packages(
             path=_wxc_root.__path__,
@@ -1150,7 +1154,7 @@ def schema(
 @root_app.command()
 def whoami(
     output: str = typer.Option('table', '--output', '-o', help='Output format: table | json | csv | raw'),
-):
+) -> None:
     """Show the currently authenticated user."""
     tok = _resolve_token()
     if not tok:
@@ -1173,14 +1177,14 @@ root_app.add_typer(int_app, name='integration', help='integration operations: sh
 
 
 @int_app.callback()
-def int_callback(ctx: typer.Context):
+def int_callback(ctx: typer.Context) -> None:
     """Integration callback."""
     if ctx.invoked_subcommand is None:
         int_show()
 
 
 @int_app.command('show')
-def int_show():
+def int_show() -> None:
     """Show integration details"""
     kd = _keyring_integration_get()
     rprint(f'                client id: {kd.client_id}')
@@ -1197,7 +1201,7 @@ def int_setup(
     client_id: Annotated[str, typer.Option(help='Client ID')] = None,
     client_secret: Annotated[str, typer.Option(help='Client secret')] = None,
     scopes: Annotated[str, typer.Option(help='Scopes')] = None,
-):
+) -> None:
     """Setup integration"""
     # check if keyring is available
     try:
@@ -1228,16 +1232,26 @@ def int_setup(
         keyring_data.client_id = client_id
         keyring_data.client_secret = client_secret
         keyring_data.scopes = scopes
-        _keyring_integration_set(keyring_data)
+        _keyring_integration_set(keyring_data)  # type: ignore[arg-type]
 
     # initiate OAuth flow to get tokens
-    _keyring_integration_get_tokens(keyring_data)
+    _keyring_integration_get_tokens(keyring_data)  # type: ignore[arg-type]
+    raise typer.Exit(0)
 
+
+@int_app.command('refresh')
+def int_refresh() -> None:
+    """Refresh access token"""
+    keyring_data = _keyring_integration_get()
+    if not (keyring_data and keyring_data.tokens and keyring_data.tokens.access_token):
+        rprint('[red]Failed get tokens from keyring. Please check your keyring[/red]')
+    _keyring_integration_get_tokens(keyring_data, refresh=True)  # type: ignore[arg-type]
     int_show()
+    raise typer.Exit(0)
 
 
 @int_app.command('reset')
-def int_reset():
+def int_reset() -> None:
     """Reset integration"""
     _keyring_delete(_KEYRING_INTEGRATION_USER)
     rprint('[green]Integration reset. Tokens deleted.[/green]')
@@ -1270,7 +1284,7 @@ app = build_cli()
 # ---------------------------------------------------------------------------
 
 
-def version_callback(value: bool):
+def version_callback(value: bool) -> None:
     if value:
         typer.echo(f'wxc-cli version: {__version__}')
         typer.echo(f'wxc-sdk version: {wxc_sdk.__version__}')
@@ -1287,11 +1301,11 @@ def cb_main(
         callback=version_callback,
         is_eager=True,
     ),
-):
+) -> None:
     pass
 
 
-def main():
+def main() -> None:
     app(prog_name=_PROG_NAME)
 
 

@@ -3,10 +3,10 @@ repos:
   # Ruff version.
   rev: v0.15.6
   hooks:
-    # Run the linter.
-    - id: ruff-check
     # Run the formatter.
     - id: ruff-format
+    # Run the linter.
+    - id: ruff-check
 - repo: https://github.com/commitizen-tools/commitizen
   rev: v4.13.9
   hooks:

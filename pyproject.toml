@@ -32,6 +32,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "commitizen>=4.13.9",
+    "mypy>=1.19.1",
     "pre-commit>=4.5.1",
     "ruff>=0.15.6",
 ]
@@ -103,4 +104,12 @@ update_changelog_on_bump = true
 version_files = [
     "src/wxc_cli/cli.py"
 ]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = false
+disable_error_code = ["union-attr", "attr-defined", "no-any-return"]
+no_implicit_optional=false
+warn_unused_configs = true
+
 
