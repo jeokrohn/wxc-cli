@@ -1,3 +1,13 @@
+## v0.5.0 (2026-03-25)
+
+### Feat
+
+- new command "integration refresh"
+
+### Fix
+
+- refresh integration access token if less than 25% of initial lifetime remaining
+
 ## v0.4.0 (2026-03-21)
 
 ### Feat
