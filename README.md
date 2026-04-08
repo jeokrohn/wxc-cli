@@ -117,6 +117,11 @@ wxc-cli people list --fields phone_numbers,display_name -o raw \
     work=$(echo "$phones" | jq -r '[.[] | select(.number_type=="work") | .value][0] // ""')
     echo -e "$name\t$work"
   done
+
+# same thing .. as one-liner
+wxc-cli people list --fields phone_numbers,display_name -o raw \
+| while IFS=$'\t' read -r p n; do echo -e "$n\t$(jq -r '[.[]|select(.number_type=="work")|.value][0]//""' <<< "$p")"; done
+
 ```
 
 ## How it works
