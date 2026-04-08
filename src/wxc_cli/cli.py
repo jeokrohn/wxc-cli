@@ -373,6 +373,11 @@ def _format_raw(items: list[Any], fields: list[str] | None) -> None:
             print('\t'.join(cells), file=out)
 
 
+def _write_json(payload: Any) -> None:
+    """Write JSON directly to stdout so terminal width cannot reflow it."""
+    print(json.dumps(payload, indent=2))
+
+
 def _format_output(
     result: Any, output: str, max_items: Optional[int] = None, fields: Optional[list[str]] = None
 ) -> None:
@@ -399,7 +404,7 @@ def _format_output(
             else:
                 rows.append(item)
         payload = rows if len(rows) != 1 else rows[0]
-        rprint(json.dumps(payload, indent=2))
+        _write_json(payload)
         return
 
     # ---- CSV ----
@@ -1146,9 +1151,9 @@ def schema(
         raise typer.Exit(1)
 
     if output == 'schema':
-        rprint(json.dumps(target.model_json_schema(), indent=2))
+        _write_json(target.model_json_schema())
     else:
-        rprint(json.dumps(_make_template(target), indent=2))
+        _write_json(_make_template(target))
 
 
 @root_app.command()
