@@ -110,6 +110,13 @@ wxc-cli people list --display-name Alice -o raw --fields person_id \
 wxc-cli people list --calling-data --fields display_name,emails \
   --location-id $(wxc-cli locations list --name Hartford --fields location_id -o raw)
 
+# extracting information from JSON in raw output
+# this creates a list with display name and work phone numnber of all users
+wxc-cli people list --fields phone_numbers,display_name -o raw \
+| while IFS=$'\t' read -r phones name; do
+    work=$(echo "$phones" | jq -r '[.[] | select(.number_type=="work") | .value][0] // ""')
+    echo -e "$name\t$work"
+  done
 ```
 
 ## How it works
