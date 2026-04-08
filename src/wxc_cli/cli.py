@@ -48,7 +48,7 @@ from wxc_sdk.integration import Integration
 from wxc_sdk.scopes import parse_scopes
 from wxc_sdk.tokens import Tokens
 
-__version__ = 'v0.5.0'
+__version__ = 'v0.5.1'
 
 console = Console()
 

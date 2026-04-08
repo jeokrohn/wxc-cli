@@ -1,3 +1,9 @@
+## v0.5.1 (2026-04-08)
+
+### Fix
+
+- raw JSON output to avoid line breaks.
+
 ## v0.5.0 (2026-03-25)
 
 ### Feat
